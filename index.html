@@ -236,6 +236,14 @@
 .video-menu-items span{padding:7px;border-radius:8px;background:#f3e8d4;font-weight:800}
 .video-menu-items b{display:block;font-size:.67rem;color:#7c4a2a;margin-top:2px}
 .video-menu-note{text-align:center;margin-top:9px;font-weight:900;color:#9a3412}
+.video-menu-card{pointer-events:none}
+.immersive-home[data-story-step="3"] .video-menu-card,.immersive-home[data-story-step="4"] .video-menu-card{pointer-events:auto}
+.video-menu-items label{display:block;padding:7px;border-radius:8px;background:#f3e8d4;font-weight:800;cursor:pointer;line-height:1.35}
+.video-menu-items label:has(input:checked){background:#fde68a;outline:2px solid #d97706}
+.video-menu-items input{accent-color:#b45309;margin-right:5px}
+.video-order-confirm{display:block;width:100%;margin-top:10px;padding:9px 12px;border:0;border-radius:9px;background:#9a3412;color:white;font-weight:900;cursor:pointer}
+.video-order-confirm:disabled{opacity:.45;cursor:not-allowed}
+.video-menu-card[aria-hidden="true"]{pointer-events:none!important}
 .immersive-home[data-story-step="3"] .video-menu-card,.immersive-home[data-story-step="4"] .video-menu-card{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .immersive-home[data-story-step="3"] .video-dialogue,.immersive-home[data-story-step="4"] .video-dialogue{opacity:0!important}
 @media(max-width:600px){.video-menu-card{width:min(300px,82%);top:48%;padding:10px;font-size:.7rem}}
@@ -255,13 +263,14 @@
     <div class="video-dialogue vd1"><b>你好！</b><small>Nǐ hǎo! · Hello!</small></div><div class="video-dialogue vd2"><b>我要這個。</b><small>Wǒ yào zhège. · I’ll have this.</small></div><div class="video-dialogue vd3"><b>請拿好！</b><small>Qǐng ná hǎo! · Here you go!</small></div>
     <div class="video-menu-card" id="videoMenuCard" aria-hidden="true">
       <div class="video-menu-title">夜市菜單 · NIGHT MARKET MENU</div>
-      <div class="video-menu-items">
-        <span>🧋 珍珠奶茶 <b>Bubble tea</b></span>
-        <span>🥟 小籠包 <b>Soup dumplings</b></span>
-        <span>🍗 雞排 <b>Fried chicken</b></span>
-        <span>🍡 地瓜球 <b>Sweet-potato balls</b></span>
+      <div class="video-menu-items" id="orderMenuChoices">
+        <label><input type="checkbox" value="tea"> 🧋 珍珠奶茶 <b>Bubble tea</b></label>
+        <label><input type="checkbox" value="dumplings"> 🥟 小籠包 <b>Soup dumplings</b></label>
+        <label><input type="checkbox" value="chicken"> 🍗 雞排 <b>Fried chicken</b></label>
+        <label><input type="checkbox" value="balls"> 🍡 地瓜球 <b>Sweet-potato balls</b></label>
       </div>
-      <div class="video-menu-note">Customer chooses: bubble tea + soup dumplings</div>
+      <div class="video-menu-note" id="videoMenuNote">Choose one or more items for the customer.</div>
+      <button type="button" class="video-order-confirm" id="confirmFoodOrder" disabled>Confirm order ✓</button>
     </div>
     <div class="video-food-tray">🧋　🥡</div><div class="video-subtitle"><span class="video-live-dot"></span><span id="videoSubtitle">A visitor spots a glowing Taiwanese night-market stall…</span></div>
   </div>
@@ -361,9 +370,47 @@ if(voiceToggle){voiceToggle.addEventListener('click',()=>{voiceEnabled=!voiceEna
 
 let restaurantTimers=[];
 function clearRestaurantTimers(){restaurantTimers.forEach(clearTimeout);restaurantTimers=[];}
-function restaurantStep(i){const stage=$('#restaurantStage');const person=$('#scenePerson');stage.dataset.step=String(i);$('#home').dataset.storyStep=String(i);const d=restaurantSteps[i];person.style.setProperty('--walk-x',d.x);person.classList.toggle('stopped',i!==0);$('#sceneChinese').textContent=d.cn;$('#scenePinyin').textContent=d.py;$('#sceneEnglish').textContent=d.en;$('#sceneCaption').textContent=d.caption;$('#sceneStep').textContent=d.status;$$('[data-step]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.step)===i)));$$('.scene-timeline span').forEach((el,j)=>el.classList.toggle('active',j<=i));stage.style.background=({arrival:'linear-gradient(180deg,#101b3d 0%,#27245c 42%,#8a3c17 100%)',order:'linear-gradient(180deg,#101b3d 0%,#312e81 42%,#9a3412 100%)',payment:'linear-gradient(180deg,#172554 0%,#3b1d5b 45%,#78350f 100%)',cooking:'linear-gradient(180deg,#172554 0%,#7c2d12 48%,#431407 100%)',serve:'linear-gradient(180deg,#172554 0%,#4c1d95 45%,#9a3412 100%)',thanks:'linear-gradient(180deg,#172554 0%,#312e81 42%,#78350f 100%)'})[d.mood];if(voiceEnabled)speakScene(i);const menu=$('#videoMenuCard');if(menu)menu.setAttribute('aria-hidden',String(!(i===3||i===4)));const ticket=$('.scene-order-ticket');if(ticket)ticket.textContent=i===5?'ORDER: 🧋 + 🥟':'ORDER RECEIVED';const cash=$('.scene-cash');if(cash)cash.textContent=i===6?'💳 ✓':'💳';}
+const foodOrderOptions={
+ tea:{emoji:'🧋',cn:'珍珠奶茶',py:'zhēnzhū nǎichá',en:'bubble tea'},
+ dumplings:{emoji:'🥟',cn:'小籠包',py:'xiǎolóngbāo',en:'soup dumplings'},
+ chicken:{emoji:'🍗',cn:'雞排',py:'jīpái',en:'fried chicken'},
+ balls:{emoji:'🍡',cn:'地瓜球',py:'dìguāqiú',en:'sweet-potato balls'}
+};
+let selectedFoodOrder=[];
+function updateFoodOrderSelection(){
+ const checks=$$('#orderMenuChoices input:checked');
+ selectedFoodOrder=checks.map(input=>input.value).filter(key=>foodOrderOptions[key]);
+ const confirm=$('#confirmFoodOrder');if(confirm)confirm.disabled=selectedFoodOrder.length===0;
+ const note=$('#videoMenuNote');if(note)note.textContent=selectedFoodOrder.length?`Selected: ${selectedFoodOrder.map(key=>foodOrderOptions[key].en).join(' + ')}`:'Choose one or more items for the customer.';
+}
+function applyFoodOrder(){
+ if(!selectedFoodOrder.length){toast('Please choose at least one food item.');return;}
+ const items=selectedFoodOrder.map(key=>foodOrderOptions[key]);
+ const cn='我要'+items.map(item=>item.cn).join('、')+'。';
+ const py='Wǒ yào '+items.map(item=>item.py).join('、')+'。';
+ const en='I would like '+items.map(item=>item.en).join(' and ')+'.';
+ restaurantSteps[5].cn=cn;restaurantSteps[5].py=py;restaurantSteps[5].en=en;
+ restaurantSteps[5].caption='Scene 6 · The customer places the selected order: '+items.map(item=>item.en).join(', ')+'.';
+ const ticket=$('.scene-order-ticket');if(ticket)ticket.textContent='ORDER: '+items.map(item=>item.emoji).join(' ');
+ const tray=$('.video-food-tray');if(tray)tray.textContent=items.map(item=>item.emoji).join('　');
+ const note=$('#videoMenuNote');if(note)note.textContent='Order confirmed: '+items.map(item=>item.en).join(' + ');
+ clearRestaurantTimers();restaurantStep(5);for(let n=6;n<restaurantSteps.length;n++)restaurantTimers.push(setTimeout(()=>restaurantStep(n), (n-5)*2800));
+}
+const confirmOrderButton=$('#confirmFoodOrder');if(confirmOrderButton)confirmOrderButton.addEventListener('click',applyFoodOrder);
+$$('#orderMenuChoices input').forEach(input=>input.addEventListener('change',updateFoodOrderSelection));
+function restaurantStep(i){
+ const stage=$('#restaurantStage');const person=$('#scenePerson');
+ if(i===5&&!selectedFoodOrder.length){i=4;toast('Choose the customer’s food from the menu first.');}
+ stage.dataset.step=String(i);$('#home').dataset.storyStep=String(i);const d=restaurantSteps[i];
+ person.style.setProperty('--walk-x',d.x);person.classList.toggle('stopped',i!==0);
+ $('#sceneChinese').textContent=d.cn;$('#scenePinyin').textContent=d.py;$('#sceneEnglish').textContent=d.en;$('#sceneCaption').textContent=d.caption;$('#sceneStep').textContent=d.status;
+ $$('[data-step]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.step)===i)));
+ $$('.scene-timeline span').forEach((el,j)=>el.classList.toggle('active',j<=i));
+ stage.style.background=({arrival:'linear-gradient(180deg,#101b3d 0%,#27245c 42%,#8a3c17 100%)',order:'linear-gradient(180deg,#101b3d 0%,#312e81 42%,#9a3412 100%)',payment:'linear-gradient(180deg,#172554 0%,#3b1d5b 45%,#78350f 100%)',cooking:'linear-gradient(180deg,#172554 0%,#7c2d12 48%,#431407 100%)',serve:'linear-gradient(180deg,#172554 0%,#4c1d95 45%,#9a3412 100%)',thanks:'linear-gradient(180deg,#172554 0%,#312e81 42%,#78350f 100%)'})[d.mood];
+ if(voiceEnabled)speakScene(i);const menu=$('#videoMenuCard');if(menu)menu.setAttribute('aria-hidden',String(!(i===3||i===4)));
+ const ticket=$('.scene-order-ticket');if(ticket&&i!==5)ticket.textContent='ORDER RECEIVED';const cash=$('.scene-cash');if(cash)cash.textContent=i===6?'💳 ✓':'💳';
+}
 $$('[data-step]').forEach(b=>b.addEventListener('click',()=>{const home=$('#home');if(home)home.classList.add('story-playing');runVideoCaptions();clearRestaurantTimers();const i=Number(b.dataset.step);restaurantStep(i);}));
-
 
 // Sync the homepage caption with the cinematic looping animation.
 const videoLines=[
@@ -371,8 +418,8 @@ const videoLines=[
 [2800,'你好！ Nǐ hǎo! — Hello!'],
 [5600,'你要什麼？ Nǐ yào shénme? — What would you like?'],
 [8400,'請給我看菜單。 — Please show me the menu.'],
-[11200,'The menu appears. The customer chooses bubble tea and soup dumplings.'],
-[14000,'我要一杯珍珠奶茶和一份小籠包。 — I would like bubble tea and soup dumplings.'],
+[11200,'The menu appears. You choose what the customer will order.'],
+[14000,'The customer places the food order you selected from the menu.'],
 [16800,'The customer pays. The vendor starts preparing the order…'],
 [19600,'請稍等。 Qǐng shāo děng. — Please wait a moment.'],
 [22400,'好了，請拿好。 — It is ready; here you go!'],
@@ -382,12 +429,25 @@ const videoLines=[
 ];let videoCaptionTimer;function runVideoCaptions(){const el=document.getElementById('videoSubtitle');if(!el)return;let start=Date.now();clearInterval(videoCaptionTimer);videoCaptionTimer=setInterval(()=>{let t=(Date.now()-start)%33600;let line=videoLines[0][1];for(const item of videoLines){if(t>=item[0])line=item[1]}el.textContent=line},250)}
 
 const homePlay=$('#homePlayStory'), homeAuto=$('#homeAutoPlay');
-function playHomeStory(){const home=$('#home');if(home)home.classList.add('story-playing');clearRestaurantTimers();restaurantStep(0);for(let n=1;n<restaurantSteps.length;n++)restaurantTimers.push(setTimeout(()=>restaurantStep(n),n*2800));}
+function playHomeStory(){const home=$('#home');if(home)home.classList.add('story-playing');clearRestaurantTimers();selectedFoodOrder=[];$$('#orderMenuChoices input').forEach(input=>input.checked=false);updateFoodOrderSelection();restaurantStep(0);for(let n=1;n<=4;n++)restaurantTimers.push(setTimeout(()=>restaurantStep(n),n*2800));}
 if(homePlay)homePlay.addEventListener('click',playHomeStory);if(homeAuto)homeAuto.addEventListener('click',playHomeStory);
 
 
 })();
 </script>
+
+<script>
+/* Keep a local copy of the site so it can open when the device is offline. */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./service-worker.js")
+      .catch(function (error) {
+        console.log("Offline support could not be started:", error);
+      });
+  });
+}
+</script>
+
 </body></html>
 
 <style id="performance-optimizations">
